@@ -144,7 +144,7 @@ class Conditions:
         return self.function.get(test_type, lambda x: x)(test_var)
 
 
-STOP_EDIT_FLAG = True
+IMAGE_EDITED_FLAG = False
 flag = False
 input_flag = False
 camera_accessible = True
@@ -215,6 +215,7 @@ check_start()
 main_file = pd.read_csv('database.csv', converters={i: str for i in range(0, 100)})
 main_file['Roll No.'] = main_file['Roll No.'].apply(str)
 captured_pic = False
+captured_pic_edit = False
 test = Conditions().test_case
 
 
@@ -223,6 +224,16 @@ def update_course_list():
     selected = variables['Course'].get()
     branches = courses_dict.get(selected, [])
     entry8['values'] = branches
+
+
+def set_preview_frame(img):
+    global preview_frame
+
+    img = cv2.resize(img, (width, height))
+    img = fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGBA))
+    imgtk = ImageTk.PhotoImage(image=img)
+    preview_frame.imgtk = imgtk
+    preview_frame.configure(image=imgtk)
 
 
 def refresh(refresh_all=False):
@@ -255,7 +266,7 @@ def create_new_branch(branch):
 
 
 def thread_bg():
-    global entry0
+    global entry0, IMAGE_EDITED_FLAG, captured_pic
     while True:
         update_course_list()
         entered = variables['Roll No.'].get()
@@ -264,6 +275,11 @@ def thread_bg():
         selected = sorted(
             [x for x in main_file['Roll No.'] if x.startswith(entered)])
         entry0['values'] = selected
+        if cv2.getWindowProperty('sunset', cv2.WND_PROP_VISIBLE) < 1:
+            if IMAGE_EDITED_FLAG:
+                set_preview_frame(captured_pic_edit)
+                IMAGE_EDITED_FLAG = False
+                captured_pic = captured_pic_edit
         time.sleep(0.5)
 
 
@@ -707,120 +723,224 @@ class GoogleSync:
             self.listbox.insert(index, row['titles'])
 
 
+# class EditImageWindow:
+#     def __init__(self):
+#         global STOP_EDIT_FLAG
+#         STOP_EDIT_FLAG = False
+#         self.t1 = threading.Thread(target=self.image_edit_thread)
+#
+#         self.top = Toplevel()
+#
+#         self.img_slider = PhotoImage('img_slider', width=30, height=15, master=self.top)
+#         self.set_img_color(self.img_slider, "#ff0000")
+#         self.img_slider_active = PhotoImage('img_slider_active', width=30, height=15, master=self.top)
+#         self.set_img_color(self.img_slider_active, '#1065BF')
+#
+#         self.brightness_scale = self.create_tick_scale(35)
+#         self.contrast_scale = self.create_tick_scale(35)
+#         self.hue_scale = self.create_tick_scale(10)
+#         self.sat_scale = self.create_tick_scale(35)
+#         # self.image = cv2.resize(cv2.imread('pras.jpg'), (320, 240))
+#         img_size = (240, 320)
+#         self.image = cv2.resize(captured_pic, img_size[::-1])
+#         im = ImageTk.PhotoImage(fromarray(self.image[..., ::-1]))
+#         self.preview_frame = Label(self.top, image=im)
+#         self.preview_frame.imgtk = im
+#         self.preview_frame.place(x=125, y=270,
+#                                  width=img_size[0],
+#                                  height=img_size[1])
+#
+#         self.configure()
+#         self.top.protocol("WM_DELETE_WINDOW", self.stop_edit)
+#         self.top.mainloop()
+#
+#     def create_tick_scale(self, x):
+#         scale = TickScale(self.top, from_=-x, to=x, tickinterval=x, orient="horizontal",
+#                           style='custom.Horizontal.TScale', length=300)
+#         scale.set(0)
+#         return scale
+#
+#     def configure(self):
+#         """
+#         Source: https://stackoverflow.com/questions/59642558/how-to-set-tkinter-scale-sliders-color
+#         """
+#         self.top.geometry("450x600")
+#         self.top.title('Image Adjustment')
+#         self.top.configure(background='#f4f0ec')
+#         self.t1.start()
+#
+#         style = ttk.Style(self.top)
+#         style.theme_use('clam')
+#         style.element_create('custom.Horizontal.Scale.slider', 'image', self.img_slider,
+#                              ('active', self.img_slider_active))
+#         style.layout('custom.Horizontal.TScale',
+#                      [('Horizontal.Scale.trough',
+#                        {'sticky': 'nswe',
+#                         'children': [('custom.Horizontal.Scale.slider',
+#                                       {'side': 'left', 'sticky': ''})]})])
+#         style.configure('custom.Horizontal.TScale', background='#f4f0ec', foreground='#880000',
+#                         troughcolor='#73B5FA')
+#
+#         Label(self.top, text='Brightness').place(x=10, y=20)
+#         self.brightness_scale.place(x=100, y=0)
+#
+#         Label(self.top, text='Contrast').place(x=10, y=80)
+#         self.contrast_scale.place(x=100, y=60)
+#
+#         Label(self.top, text='Hue').place(x=10, y=140)
+#         self.hue_scale.place(x=100, y=120)
+#
+#         Label(self.top, text='Saturation').place(x=10, y=200)
+#         self.sat_scale.place(x=100, y=180)
+#
+#     def adjust_all(self, image):
+#         adjust = self.adjust_brightness(self.image, self.brightness)
+#         adjust = self.adjust_contrast(adjust, self.contrast)
+#         adjust = self.adjust_hue(adjust, self.hue)
+#         adjust = self.adjust_sat(adjust, self.sat)
+#         return adjust
+#
+#     def image_edit_thread(self):
+#         brightness, contrast, hue, sat = [0] * 4
+#         while True:
+#             if STOP_EDIT_FLAG:
+#                 print('THREAD TERMINATE SIG')
+#                 break
+#             if brightness != self.brightness or contrast != self.contrast or hue != self.hue or sat != self.sat:
+#                 adjust = self.adjust_all(self.image)
+#                 brightness = self.brightness
+#                 contrast = self.contrast
+#                 hue = self.hue
+#                 sat = self.sat
+#                 self.update_image(adjust)
+#             time.sleep(0.5)
+#
+#     def update_image(self, image):
+#         image = ImageTk.PhotoImage(fromarray(image[..., ::-1]))
+#         self.preview_frame.imgtk = image
+#         self.preview_frame.configure(image=image)
+#
+#     def stop_edit(self):
+#         global STOP_EDIT_FLAG
+#         STOP_EDIT_FLAG = True
+#         self.t1.join()
+#         self.top.destroy()
+#
+#     @staticmethod
+#     def set_img_color(img, color):
+#         pixel_line = "{" + " ".join(color for i in range(img.width())) + "}"
+#         pixels = " ".join(pixel_line for i in range(img.height()))
+#         img.put(pixels)
+#
+#     @staticmethod
+#     def adjust_brightness(img, brightness):
+#         brightness += 255
+#         brightness = int((brightness - 0) * (255 - (-255)) / (510 - 0) + (-255))
+#         cal = img.copy()
+#         if brightness != 0:
+#             if brightness > 0:
+#                 shadow = brightness
+#                 max = 255
+#             else:
+#                 shadow = 0
+#                 max = 255 + brightness
+#             alpha = (max - shadow) / 255
+#             gamma = shadow
+#             cal = cv2.addWeighted(img, alpha,
+#                                   img, 0, gamma)
+#         return cal
+#
+#     @staticmethod
+#     def adjust_contrast(img, contrast):
+#         contrast += 127
+#         contrast = int((contrast - 0) * (127 - (-127)) / (254 - 0) + (-127))
+#         cal = img.copy()
+#         if contrast != 0:
+#             alpha = float(131 * (contrast + 127)) / (127 * (131 - contrast))
+#             gamma = 127 * (1 - alpha)
+#             cal = cv2.addWeighted(cal, alpha, cal, 0, gamma)
+#         return cal
+#
+#     @staticmethod
+#     def adjust_hue(img, hue):
+#         cal = img.copy()
+#         cal = cv2.cvtColor(cal, cv2.COLOR_BGR2HSV)
+#         h, s, i = cv2.split(cal)
+#         h = h.astype(np.float64)
+#         h = h + int(hue)
+#         h[h < 0] += 180
+#         h[h > 180] -= 180
+#         h = h.astype(np.uint8)
+#         cal = cv2.merge([h, s, i])
+#         return cv2.cvtColor(cal, cv2.COLOR_HSV2BGR)
+#
+#     @staticmethod
+#     def adjust_sat(img, sat):
+#         cal = img.copy()
+#         cal = cv2.cvtColor(cal, cv2.COLOR_BGR2HSV)
+#         h, s, i = cv2.split(cal)
+#         s = s.astype(np.float64)
+#         # s = s + int(sat)
+#         # s[s < 0] = 0
+#         sat += 100
+#         s_shift = (sat - 100) / 100.0
+#         s = s + 255.0 * s_shift
+#         s[s < 0] = 0
+#         s[s > 255] = 255
+#         s = s.astype(np.uint8)
+#         cal = cv2.merge([h, s, i])
+#         return cv2.cvtColor(cal, cv2.COLOR_HSV2BGR)
+#
+#     @property
+#     def brightness(self):
+#         return self.brightness_scale.get()
+#
+#     @property
+#     def contrast(self):
+#         return self.contrast_scale.get()
+#
+#     @property
+#     def hue(self):
+#         return self.hue_scale.get()
+#
+#     @property
+#     def sat(self):
+#         return self.sat_scale.get()
+
 class EditImageWindow:
     def __init__(self):
-        global STOP_EDIT_FLAG
-        STOP_EDIT_FLAG = False
-        self.t1 = threading.Thread(target=self.image_edit_thread)
+        self.img = cv2.resize(captured_pic, (240, 320))
+        self.main()
 
-        self.top = Toplevel()
+    def adjust_image(self, brightness=0):
+        global captured_pic, captured_pic_edit, IMAGE_EDITED_FLAG
+        try:
+            brightness = cv2.getTrackbarPos('Brightness', 'EDIT')
+            contrast = cv2.getTrackbarPos('Contrast', 'EDIT')
+            hue = cv2.getTrackbarPos('Hue', 'EDIT')
+            sat = cv2.getTrackbarPos('Saturation', 'EDIT')
+        except:
+            cv2.imshow('EDIT', self.img)
+            return
 
-        self.img_slider = PhotoImage('img_slider', width=30, height=15, master=self.top)
-        self.set_img_color(self.img_slider, "#ff0000")
-        self.img_slider_active = PhotoImage('img_slider_active', width=30, height=15, master=self.top)
-        self.set_img_color(self.img_slider_active, '#1065BF')
+        effect = self.controller(self.img, brightness,
+                                 contrast, hue, sat)
+        captured_pic_edit = self.controller(captured_pic, brightness,
+                                 contrast, hue, sat)
+        IMAGE_EDITED_FLAG = True
 
-        self.brightness_scale = self.create_tick_scale(35)
-        self.contrast_scale = self.create_tick_scale(35)
-        self.hue_scale = self.create_tick_scale(10)
-        self.sat_scale = self.create_tick_scale(35)
-        # self.image = cv2.resize(cv2.imread('pras.jpg'), (320, 240))
-        img_size = (240, 320)
-        self.image = cv2.resize(captured_pic, img_size[::-1])
-        im = ImageTk.PhotoImage(fromarray(self.image[..., ::-1]))
-        self.preview_frame = Label(self.top, image=im)
-        self.preview_frame.imgtk = im
-        self.preview_frame.place(x=125, y=270,
-                                 width=img_size[0],
-                                 height=img_size[1])
-
-        self.configure()
-        self.top.protocol("WM_DELETE_WINDOW", self.stop_edit)
-        self.top.mainloop()
-
-    def create_tick_scale(self, x):
-        scale = TickScale(self.top, from_=-x, to=x, tickinterval=x, orient="horizontal",
-                          style='custom.Horizontal.TScale', length=300)
-        scale.set(0)
-        return scale
-
-    def configure(self):
-        """
-        Source: https://stackoverflow.com/questions/59642558/how-to-set-tkinter-scale-sliders-color
-        """
-        self.top.geometry("450x600")
-        self.top.title('Image Adjustment')
-        self.top.configure(background='#f4f0ec')
-        self.t1.start()
-
-        style = ttk.Style(self.top)
-        style.theme_use('clam')
-        style.element_create('custom.Horizontal.Scale.slider', 'image', self.img_slider,
-                             ('active', self.img_slider_active))
-        style.layout('custom.Horizontal.TScale',
-                     [('Horizontal.Scale.trough',
-                       {'sticky': 'nswe',
-                        'children': [('custom.Horizontal.Scale.slider',
-                                      {'side': 'left', 'sticky': ''})]})])
-        style.configure('custom.Horizontal.TScale', background='#f4f0ec', foreground='#880000',
-                        troughcolor='#73B5FA')
-
-        Label(self.top, text='Brightness').place(x=10, y=20)
-        self.brightness_scale.place(x=100, y=0)
-
-        Label(self.top, text='Contrast').place(x=10, y=80)
-        self.contrast_scale.place(x=100, y=60)
-
-        Label(self.top, text='Hue').place(x=10, y=140)
-        self.hue_scale.place(x=100, y=120)
-
-        Label(self.top, text='Saturation').place(x=10, y=200)
-        self.sat_scale.place(x=100, y=180)
-
-    def adjust_all(self, image):
-        adjust = self.adjust_brightness(self.image, self.brightness)
-        adjust = self.adjust_contrast(adjust, self.contrast)
-        adjust = self.adjust_hue(adjust, self.hue)
-        adjust = self.adjust_sat(adjust, self.sat)
-        return adjust
-
-    def image_edit_thread(self):
-        brightness, contrast, hue, sat = [0] * 4
-        while True:
-            if STOP_EDIT_FLAG:
-                print('THREAD TERMINATE SIG')
-                break
-            if brightness != self.brightness or contrast != self.contrast or hue != self.hue or sat != self.sat:
-                adjust = self.adjust_all(self.image)
-                brightness = self.brightness
-                contrast = self.contrast
-                hue = self.hue
-                sat = self.sat
-                self.update_image(adjust)
-            time.sleep(0.5)
-
-    def update_image(self, image):
-        image = ImageTk.PhotoImage(fromarray(image[..., ::-1]))
-        self.preview_frame.imgtk = image
-        self.preview_frame.configure(image=image)
-
-    def stop_edit(self):
-        global STOP_EDIT_FLAG
-        STOP_EDIT_FLAG = True
-        self.t1.join()
-        self.top.destroy()
+        cv2.imshow('EDIT', effect)
 
     @staticmethod
-    def set_img_color(img, color):
-        pixel_line = "{" + " ".join(color for i in range(img.width())) + "}"
-        pixels = " ".join(pixel_line for i in range(img.height()))
-        img.put(pixels)
+    def controller(img, brightness, contrast, hue, sat):
+        brightness += 255 - 35
+        contrast += 127 - 35
+        hue -= 10
+        sat -= 35
 
-    @staticmethod
-    def adjust_brightness(img, brightness):
-        brightness += 255
         brightness = int((brightness - 0) * (255 - (-255)) / (510 - 0) + (-255))
         cal = img.copy()
+
         if brightness != 0:
             if brightness > 0:
                 shadow = brightness
@@ -832,22 +952,13 @@ class EditImageWindow:
             gamma = shadow
             cal = cv2.addWeighted(img, alpha,
                                   img, 0, gamma)
-        return cal
 
-    @staticmethod
-    def adjust_contrast(img, contrast):
-        contrast += 127
         contrast = int((contrast - 0) * (127 - (-127)) / (254 - 0) + (-127))
-        cal = img.copy()
         if contrast != 0:
             alpha = float(131 * (contrast + 127)) / (127 * (131 - contrast))
             gamma = 127 * (1 - alpha)
             cal = cv2.addWeighted(cal, alpha, cal, 0, gamma)
-        return cal
 
-    @staticmethod
-    def adjust_hue(img, hue):
-        cal = img.copy()
         cal = cv2.cvtColor(cal, cv2.COLOR_BGR2HSV)
         h, s, i = cv2.split(cal)
         h = h.astype(np.float64)
@@ -855,17 +966,8 @@ class EditImageWindow:
         h[h < 0] += 180
         h[h > 180] -= 180
         h = h.astype(np.uint8)
-        cal = cv2.merge([h, s, i])
-        return cv2.cvtColor(cal, cv2.COLOR_HSV2BGR)
 
-    @staticmethod
-    def adjust_sat(img, sat):
-        cal = img.copy()
-        cal = cv2.cvtColor(cal, cv2.COLOR_BGR2HSV)
-        h, s, i = cv2.split(cal)
         s = s.astype(np.float64)
-        # s = s + int(sat)
-        # s[s < 0] = 0
         sat += 100
         s_shift = (sat - 100) / 100.0
         s = s + 255.0 * s_shift
@@ -873,23 +975,39 @@ class EditImageWindow:
         s[s > 255] = 255
         s = s.astype(np.uint8)
         cal = cv2.merge([h, s, i])
-        return cv2.cvtColor(cal, cv2.COLOR_HSV2BGR)
+        cal = cv2.cvtColor(cal, cv2.COLOR_HSV2BGR)
 
-    @property
-    def brightness(self):
-        return self.brightness_scale.get()
+        return cal
 
-    @property
-    def contrast(self):
-        return self.contrast_scale.get()
+    def main(self):
+        cv2.namedWindow('EDIT', cv2.WINDOW_NORMAL)
+        cv2.imshow('EDIT', self.img)
 
-    @property
-    def hue(self):
-        return self.hue_scale.get()
+        cv2.createTrackbar('Brightness',
+                           'EDIT', 35, 2 * 35,
+                           self.adjust_image
+                           )
 
-    @property
-    def sat(self):
-        return self.sat_scale.get()
+        cv2.createTrackbar('Contrast', 'EDIT',
+                           35, 2 * 35,
+                           self.adjust_image
+                           )
+
+        cv2.createTrackbar('Hue', 'EDIT',
+                           10, 2 * 10,
+                           self.adjust_image
+                           )
+
+        cv2.createTrackbar('Saturation', 'EDIT',
+                           35, 2 * 35,
+                           self.adjust_image
+                           )
+        cv2.waitKey(0)
+
+        def __del__(self):
+            global IMAGE
+            print('exiting...')
+            IMAGE = self.image
 
 
 window = Tk()
@@ -1261,8 +1379,9 @@ b6 = Button(
     highlightthickness=0,
     command=EditImageWindow,
     relief="flat")
+
 b6.place(
-    x=420, y=500,
+    x=430, y=485,
     width=90,
     height=39)
 
