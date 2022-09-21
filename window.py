@@ -229,7 +229,7 @@ def update_course_list():
 def set_preview_frame(img):
     global preview_frame
 
-    img = cv2.resize(img, (width, height))
+    img = cv2.resize(img, (120, 170))
     img = fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGBA))
     imgtk = ImageTk.PhotoImage(image=img)
     preview_frame.imgtk = imgtk
@@ -909,7 +909,7 @@ class GoogleSync:
 
 class EditImageWindow:
     def __init__(self):
-        self.img = cv2.resize(captured_pic, (240, 320))
+        self.img = cv2.resize(captured_pic, (240 * 2, 320 * 2))
         self.main()
 
     def adjust_image(self, brightness=0):
@@ -968,8 +968,7 @@ class EditImageWindow:
         h = h.astype(np.uint8)
 
         s = s.astype(np.float64)
-        sat += 100
-        s_shift = (sat - 100) / 100.0
+        s_shift = sat / 100.0
         s = s + 255.0 * s_shift
         s[s < 0] = 0
         s[s > 255] = 255
